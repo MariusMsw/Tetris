@@ -15,9 +15,9 @@ public class Tetris extends JFrame{
 		Board board = new Board(this);
 		add(board);
 		
-		//add one piece
-		board.newPiece();
-		board.repaint();
+		//start lines down
+		board.start();
+		
 		setSize(200, 400);
 		setTitle("Marius's Tetris");
 		setDefaultCloseOperation(EXIT_ON_CLOSE);

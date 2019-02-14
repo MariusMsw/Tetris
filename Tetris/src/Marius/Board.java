@@ -5,6 +5,8 @@ import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -37,6 +39,7 @@ public class Board extends JPanel implements ActionListener {
 		statusBar = parent.getStatusBar();
 		board = new Tetrominos[BOARD_WIDTH * BOARD_HEIGHT];
 		clearBoard();
+		addKeyListener(new MyTetrisAdapter());
 	}
 
 	public int squareWidth() {
@@ -62,6 +65,8 @@ public class Board extends JPanel implements ActionListener {
 			int y = curY - curPiece.y(i);
 			board[y * BOARD_WIDTH + x] = curPiece.getShape();
 		}
+		
+		removeFullLines();
 
 		if (!isFallingFinished) {
 			newPiece();
@@ -72,9 +77,18 @@ public class Board extends JPanel implements ActionListener {
 		curPiece.setRandomShape();
 		curX = BOARD_WIDTH / 2 + 1;
 		curY = BOARD_HEIGHT - 1 + curPiece.minY();
+		
+		if (!tryMove(curPiece, curX, curY - 1)) {
+			curPiece.setShape(Tetrominos.NoShape);
+			timer.stop();
+			isStarted = false;
+			statusBar.setText("Game Over");
+		}
+		
 	}
 
 	private void oneLineDown() {
+		if (!tryMove(curPiece, curX, curY - 1))
 		pieceDropped();
 	}
 
@@ -113,24 +127,161 @@ public class Board extends JPanel implements ActionListener {
 		for (int i = 0; i < BOARD_HEIGHT; i++) {
 			for (int j = 0; j < BOARD_WIDTH; ++j) {
 				Tetrominos shape = shapeAt(j, BOARD_HEIGHT - i - 1);
+				
 				if (shape != Tetrominos.NoShape) {
 					drawSquare(g, j * squareWidth(), boardTop + i * squareHeight(), shape);
 				}
 			}
 		}
-		
-		
+
 		if (curPiece.getShape() != Tetrominos.NoShape) {
-			for(int i = 0; i < 4; ++i) {
+			for (int i = 0; i < 4; ++i) {
 				int x = curX + curPiece.x(i);
 				int y = curY - curPiece.y(i);
-				drawSquare(g, x * squareWidth(), boardTop +
-						(BOARD_HEIGHT - y - 1) * squareHeight(),
+				drawSquare(g, x * squareWidth(), boardTop + (BOARD_HEIGHT - y - 1) * squareHeight(),
 						curPiece.getShape());
 			}
 		}
 	}
 
-	// paint the board
+	public void start() {
+		if (isPaused)
+			return;
 
+		isStarted = true;
+		isFallingFinished = false;
+		numLinesRemoved = 0;
+		timer.start();
+	}
+
+	public void pause() {
+		if (!isPaused)
+			return;
+
+		isPaused = !isPaused;
+
+		if (isPaused) {
+			timer.stop();
+			statusBar.setText("Paused");
+		} else {
+			timer.start();
+			statusBar.setText(String.valueOf(numLinesRemoved));
+		}
+		
+		repaint();
+	}
+
+	private boolean tryMove(Shape newPiece, int newX, int newY) {
+		for (int i = 0; i < 4; ++i) {
+			int x = newX + newPiece.x(i);
+			int y = newY - newPiece.y(i);
+
+			if (x < 0 || x >= BOARD_WIDTH || y < 0 || y >= BOARD_HEIGHT) {
+				return false;
+			}
+			if (shapeAt(x, y) != Tetrominos.NoShape) {
+				return false;
+			}
+		}
+
+		curPiece = newPiece;
+		curX = newX;
+		curY = newY;
+
+		repaint();
+
+		return true;
+	}
+
+	private void removeFullLines() {
+		int numFullLines = 0;
+
+		for (int i = BOARD_HEIGHT - 1; i >= 0; --i) {
+			boolean lineIsFull = true;
+
+			for (int j = 0; j < BOARD_WIDTH; ++j) {
+				if (shapeAt(j, i) == Tetrominos.NoShape) {
+					lineIsFull = false;
+					break;
+				}
+			}
+
+			if (lineIsFull) {
+				++numFullLines;
+				for (int x = i; x < BOARD_HEIGHT - 1; ++x) {
+					for (int j = 0; j < BOARD_WIDTH; ++j) {
+						board[x * BOARD_WIDTH + j] = shapeAt(j, x + 1);
+					}
+				}
+			}
+
+			if (numFullLines > 0) {
+				numLinesRemoved += numFullLines;
+				statusBar.setText(String.valueOf(numLinesRemoved));
+				isFallingFinished = true;
+				curPiece.setShape(Tetrominos.NoShape);
+				repaint();
+			}
+		}
+	}
+
+	// add drop down method
+
+	private void dropDown() {
+		int newY = curY;
+
+		while (newY > 0) {
+			if (!tryMove(curPiece, curX, newY - 1))
+				break;
+
+			--newY;
+		}
+
+		pieceDropped();
+	}
+	
+	class MyTetrisAdapter extends KeyAdapter{
+
+		@Override
+		public void keyPressed(KeyEvent ke) {
+			
+			if(!isStarted || curPiece.getShape() == Tetrominos.NoShape) {
+				return;
+			}
+			
+			int keyCode = ke.getKeyCode();
+			
+			if(keyCode == 'p' || keyCode == 'P')
+				pause();
+			
+			if(isPaused)
+				return;
+			switch(keyCode) {
+			case KeyEvent.VK_LEFT:
+				tryMove(curPiece,curX - 1, curY);
+				break;
+			case KeyEvent.VK_RIGHT:
+				tryMove(curPiece, curX + 1, curY);
+				break;
+			case KeyEvent.VK_DOWN:
+				tryMove(curPiece.rotateRight(),curX, curY);
+				break;
+			case KeyEvent.VK_UP:
+				tryMove(curPiece.rotateLeft(), curX, curY);
+				break;
+			case KeyEvent.VK_SPACE:
+				dropDown();
+			case 'd':
+				oneLineDown();
+				break;
+			case 'D':
+				oneLineDown();
+				break;
+			}
+		}
+		
+		
+		
+		
+	}
 }
